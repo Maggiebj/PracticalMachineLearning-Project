@@ -1,0 +1,86 @@
+---
+title: "Pml-Project"
+author: "Meng Xin"
+date: "Thursday, June 18, 2015"
+output: html_document
+---
+#Synopsis
+This project is  practice of machine learning and predict of personal activity.The goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).   
+
+#Data Processing  
+Load training data for the project from internet.There are also a  20 rows test data set used to score the model I fit.  
+
+```{r}
+setInternet2(use=TRUE)
+dir.create("pml")
+url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url,"pml/pml-training.csv")
+url="https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url,"pml/pml-testing.csv")
+data<-read.csv("pml/pml-training.csv")
+test<-read.csv("pml/pml-testing.csv")
+library(caret)
+```
+
+#Cleaning Data  
+The goal of the project is to predict the manner in which the participants did the exercise. This is the "classe" variable in the training set. Any of the other variables can be used to predict with.  
+Firstly, I split the original training dataset into 3 parts: training subset(60%), testing subset(20%),validation subset(20%)  
+```{r}
+inTrain<-createDataPartition(data$classe,p=0.6,list=F)
+training<-data[inTrain,]
+testing<-data[-inTrain,]
+dim(training)
+dim(testing)
+inValSet<-createDataPartition(testing$classe,p=0.5,list=F)
+validation<-testing[inValSet,]
+testing<-testing[-inValSet,]
+dim(testing)
+dim(validation)
+```
+  
+Having a look at the original test dataset,there're some columns are null or NA, they can't be used to predict.So I remove these columns in training set.  
+```{r}
+notfeature<-grep("NA",data[,1:160])
+training<-training[,-notfeature]
+notfeature<-nearZeroVar(training,saveMetrics=F)
+trainingfea<-training[,-notfeature]
+dim(trainingfea)
+```
+  
+I also removed some junk variables like username,x, timestamps,windows.Cleaning the training set again.  
+```{r}
+names(trainingfea)
+training1<-trainingfea[,-c(1:6)]
+dim(training1)
+```
+  
+#Model Fitting  
+The outcome of classe is factor, so it's a non linear model to be used.I fit it with the method of randomforest and boosting with traincontrol of cross validation. I use k-folder CV,k=3. I have tried the default k=10, it took more than 1 hour. k=3 can get very good accuracy (>98%) and finished the model fitting in 15 minutes.Error estimated with cross validation is 1-accuracy=1-0.986=0.014 
+```{r}
+set.seed(123)
+fitControl<-trainControl(method="cv",number=3)
+rffit1<-train(classe~.,data=training1,method="rf",trControl=fitControl)
+print(rffit1)
+```
+  
+For comparition, I use another method of boosting, also with traincontrol of k-folder cross validation ,k=3. Also get a good accuracy.Error estimated with cross validation is 1-accuracy=1- 0.957=0.043
+```{r}
+gbmfit1<-train(classe~.,data=training1,method="gbm",verbose=F,trControl=fitControl)
+print(gbmfit1)
+```
+#Model Comparition  
+Using testing subset to compare the rffit and gbmfit.rffit has better accuracy.  
+```{r}
+predict1<-predict(rffit1,newdata=testing)
+confusionMatrix(testing$classe,predict1)
+predict2<-predict(gbmfit1,newdata=testing)
+confusionMatrix(testing$classe,predict2)
+```
+#Out of Sample Error   
+I use validation subset to evaluate the out of sample error of rffit is 1-accuarcy=1-0.991=0.009  
+```{r}
+predict3<-predict(rffit1,newdata=validation)
+confusionMatrix(validation$classe,predict3)
+```
+
+
